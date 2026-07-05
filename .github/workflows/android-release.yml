@@ -1,0 +1,83 @@
+name: Android Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment to read Supabase secrets from
+        required: true
+        default: staging
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      build_name:
+        description: Android version name
+        required: true
+        default: 1.0.0
+      build_number:
+        description: Android version code
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build APK and AAB
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.3"
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build release APK
+        run: >
+          flutter build apk --release
+          --build-name="${{ inputs.build_name }}"
+          --build-number="${{ inputs.build_number }}"
+          --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}"
+          --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+
+      - name: Build Play Store bundle
+        run: >
+          flutter build appbundle --release
+          --build-name="${{ inputs.build_name }}"
+          --build-number="${{ inputs.build_number }}"
+          --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}"
+          --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: luma-stream-${{ inputs.environment }}-android-${{ inputs.build_name }}-${{ inputs.build_number }}
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
